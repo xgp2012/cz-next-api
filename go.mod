@@ -1,6 +1,12 @@
 module github.com/songquanpeng/one-api
 
-go 1.20
+// 从 1.20 提升到 1.21：relay/adaptor/replicate/adaptor.go 使用了标准库
+// "slices"（slices.Contains），该包在 Go 1.21 才进入标准库。
+// 声明为 1.20 时 CI 会按 go.mod 装 1.20，编译直接失败：
+//   package slices is not in GOROOT
+// 本地装了更高的版本所以看不出来 —— 这类"本地能过、CI 挂"的偏差
+// 正是 go-version-file 该暴露的问题，因此以代码实际需求为准。
+go 1.21
 
 require (
 	cloud.google.com/go/iam v1.1.10
