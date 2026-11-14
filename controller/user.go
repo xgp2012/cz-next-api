@@ -14,6 +14,7 @@ import (
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/common/i18n"
+	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/common/random"
 	"github.com/songquanpeng/one-api/model"
 )
@@ -177,6 +178,16 @@ func Register(c *gin.Context) {
 		return
 	}
 
+	// 记录一次有效邀请，供推广中心展示"已邀请人数"。
+	// 这里只累加计数，不发放任何奖励——奖励按被邀请人的**实际消费**比例计提
+	// （见 model.AccrueConsumeCommission），避免注册即刷小号套利。
+	if inviterId != 0 {
+		if err := model.RecordInvite(inviterId); err != nil {
+			// 邀请计数失败不应阻断注册：用户已经创建成功，这是纯统计信息
+			logger.SysError(fmt.Sprintf("failed to record invite for user %d: %s", inviterId, err.Error()))
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -318,6 +329,12 @@ func GenerateAccessToken(c *gin.Context) {
 	return
 }
 
+// GetAffCode 返回当前用户的邀请码（旧接口，仅返回裸字符串）。
+//
+// Deprecated: 已被 controller.GetAffInfo 取代（GET /api/user/aff），
+// 后者返回邀请码 + 推广链接 + 邀请人数 + 待结算/累计佣金，是前端实际使用的接口。
+// 保留本函数是因为它是 User 邀请码的"按需生成"逻辑的唯一实现，
+// 其他地方（如后台建号）可能复用；路由已不再注册它。
 func GetAffCode(c *gin.Context) {
 	id := c.GetInt(ctxkey.Id)
 	user, err := model.GetUserById(id, true)

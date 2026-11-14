@@ -8,6 +8,14 @@ build
 logs
 data
 /web/node_modules
+# Nuxt 前端（web/nuxt）：依赖、构建缓存与产物都不入库，
+# 产物最终由 web/build-nuxt.sh 输出到 web/build/<theme>（已被上面的 build 规则忽略）
+/web/nuxt/node_modules
+/web/nuxt/.nuxt
+/web/nuxt/.output
+/web/nuxt/.data
+/web/nuxt/dist
+/web/nuxt/.env
 cmd.md
 .env
 /one-api

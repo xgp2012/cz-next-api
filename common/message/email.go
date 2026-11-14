@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/smtp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -57,14 +58,18 @@ func SendEmail(subject string, receiver string, content string) error {
 		// need advanced client
 		var conn net.Conn
 		var err error
+		// 用 net.JoinHostPort 而不是 fmt.Sprintf("%s:%d")：
+		// SMTP 服务器填 IPv6 字面量（如 ::1）时，裸拼接会得到 "::1:587" 这种
+		// 无法解析的地址；JoinHostPort 会自动补上方括号 " [::1]:587"。
+		address := net.JoinHostPort(config.SMTPServer, strconv.Itoa(config.SMTPPort))
 		if config.SMTPPort == 465 {
 			tlsConfig := &tls.Config{
 				InsecureSkipVerify: true,
 				ServerName:         config.SMTPServer,
 			}
-			conn, err = tls.Dial("tcp", fmt.Sprintf("%s:%d", config.SMTPServer, config.SMTPPort), tlsConfig)
+			conn, err = tls.Dial("tcp", address, tlsConfig)
 		} else {
-			conn, err = net.Dial("tcp", fmt.Sprintf("%s:%d", config.SMTPServer, config.SMTPPort))
+			conn, err = net.Dial("tcp", address)
 		}
 		if err != nil {
 			return err

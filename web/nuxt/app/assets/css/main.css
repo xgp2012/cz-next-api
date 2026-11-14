@@ -1,0 +1,130 @@
+@import 'tailwindcss';
+@import '@nuxt/ui';
+
+/**
+ * 全局样式。
+ *
+ * 目标是「保持原有视觉语言」：顶部固定导航 + 1200px 居中容器 + 卡片式内容区，
+ * 但把 Semantic UI 的 class 体系换成 Tailwind 原子类。
+ */
+
+:root {
+  --oa-brand: #2185d0;
+  --oa-brand-strong: #2f73ff;
+  --oa-text: #333;
+  --oa-text-muted: #666;
+  --oa-border: #e5e7eb;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* 系统字体栈：不下载任何外部字体，避免构建期联网与额外的二进制体积 */
+body {
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: var(--oa-text);
+}
+
+code,
+pre {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+}
+
+/* 顶部导航固定，内容区补偿高度（与旧实现 padding-top: 55px 一致） */
+.oa-main {
+  padding-top: 56px;
+  min-height: calc(100vh - 56px);
+}
+
+.oa-container {
+  width: 100%;
+  max-width: 1200px;
+  margin-inline: auto;
+  padding-inline: 20px;
+}
+
+@media (max-width: 768px) {
+  .oa-container {
+    padding-inline: 10px;
+  }
+}
+
+/* 卡片：替代原来的 .chart-card / <Card fluid> */
+.oa-card {
+  background: #fff;
+  border: 1px solid var(--oa-border);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+/* 后端下发的 HTML 内容（首页/关于/公告/页脚）需要基础排版 */
+.oa-prose :where(h1, h2, h3, h4) {
+  font-weight: 600;
+  margin: 1em 0 0.5em;
+  line-height: 1.3;
+}
+.oa-prose :where(h1) {
+  font-size: 1.75rem;
+}
+.oa-prose :where(h2) {
+  font-size: 1.5rem;
+}
+.oa-prose :where(h3) {
+  font-size: 1.25rem;
+}
+.oa-prose :where(p) {
+  margin: 0.75em 0;
+  line-height: 1.7;
+}
+.oa-prose :where(ul, ol) {
+  margin: 0.75em 0;
+  padding-left: 1.5em;
+  list-style: revert;
+}
+.oa-prose :where(a) {
+  color: var(--oa-brand);
+  text-decoration: underline;
+}
+.oa-prose :where(code) {
+  background: #f3f4f6;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+.oa-prose :where(pre) {
+  background: #f3f4f6;
+  padding: 1em;
+  border-radius: 6px;
+  overflow-x: auto;
+}
+.oa-prose :where(blockquote) {
+  border-left: 4px solid var(--oa-border);
+  padding-left: 1em;
+  color: var(--oa-text-muted);
+  margin: 1em 0;
+}
+.oa-prose :where(table) {
+  border-collapse: collapse;
+  width: 100%;
+}
+.oa-prose :where(th, td) {
+  border: 1px solid var(--oa-border);
+  padding: 0.5em 0.75em;
+}
+
+/* 表格里的窄输入框（优先级/权重列） */
+.oa-cell-input {
+  width: 64px;
+}
+
+/* 移动端隐藏 */
+@media (max-width: 600px) {
+  .oa-hide-on-mobile {
+    display: none !important;
+  }
+}

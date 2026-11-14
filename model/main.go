@@ -11,7 +11,6 @@ import (
 	"github.com/songquanpeng/one-api/common/random"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"os"
 	"strings"
@@ -103,7 +102,9 @@ func openSQLite() (*gorm.DB, error) {
 	logger.SysLog("SQL_DSN not set, using SQLite as database")
 	common.UsingSQLite = true
 	dsn := fmt.Sprintf("%s?_busy_timeout=%d", common.SQLitePath, common.SQLiteBusyTimeout)
-	return gorm.Open(sqlite.Open(dsn), &gorm.Config{
+	// 驱动由构建条件决定（cgo / !cgo），见 sqlite_cgo.go 与 sqlite_purego.go。
+	// 无 cgo 时用纯 Go 实现，避免"编译通过但启动即 FatalLog"。
+	return gorm.Open(openSQLiteDriver(dsn), &gorm.Config{
 		PrepareStmt: true, // precompile SQL
 	})
 }
@@ -155,6 +156,25 @@ func migrateDB() error {
 		return err
 	}
 	if err = DB.AutoMigrate(&Log{}); err != nil {
+		return err
+	}
+	// ---- 商业化模块：定价规则 / 充值订单 / 订阅 ----
+	if err = DB.AutoMigrate(&PricingRule{}); err != nil {
+		return err
+	}
+	if err = DB.AutoMigrate(&TopUp{}); err != nil {
+		return err
+	}
+	if err = DB.AutoMigrate(&SubscriptionPlan{}); err != nil {
+		return err
+	}
+	if err = DB.AutoMigrate(&UserSubscription{}); err != nil {
+		return err
+	}
+	if err = DB.AutoMigrate(&AffCommission{}); err != nil {
+		return err
+	}
+	if err = DB.AutoMigrate(&UserAffStats{}); err != nil {
 		return err
 	}
 	if err = DB.AutoMigrate(&Channel{}); err != nil {

@@ -19,11 +19,12 @@ import (
 	"github.com/songquanpeng/one-api/controller"
 	"github.com/songquanpeng/one-api/middleware"
 	"github.com/songquanpeng/one-api/model"
+	"github.com/songquanpeng/one-api/monitor"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	"github.com/songquanpeng/one-api/router"
 )
 
-//go:embed web/build/*
+//go:embed all:web/build/*
 var buildFS embed.FS
 
 func main() {
@@ -93,6 +94,24 @@ func main() {
 	}
 	openai.InitTokenEncoders()
 	client.Init()
+
+	// 商业化：把 config 里的配置注入 model 包（避免 model 反向依赖 config）
+	model.SetQuotaPerUnitProvider(func() float64 { return config.QuotaPerUnit })
+	model.SetTopUpExpireMinutesProvider(func() int { return config.TopUpOrderExpireMinutes })
+	model.SetCommissionConfigProvider(func() model.CommissionConfig {
+		return model.CommissionConfig{
+			Enabled:     config.AffCommissionEnabled,
+			DefaultRate: config.AffCommissionRate,
+			MinQuota:    config.AffCommissionMinQuota,
+		}
+	})
+	// 推广收益转正门槛：0 表示用「1 美元等值额度」的默认值
+	model.SetAffMinTransferQuotaProvider(func() int64 { return config.AffMinTransferQuota })
+	// 订阅周期扫描（自动续费、额度重置、到期回落分组）与订单超时清理。
+	// 只有主节点跑，避免多节点重复处理同一个订阅。
+	if config.IsMasterNode {
+		monitor.StartSubscriptionWorker()
+	}
 
 	// Initialize i18n
 	if err := i18n.Init(); err != nil {

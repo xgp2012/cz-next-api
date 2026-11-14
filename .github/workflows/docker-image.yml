@@ -1,35 +1,67 @@
 name: Publish Docker image
 
+# 什么时候构建：
+#   1. 推 v*.*.* 形式的 tag —— 最常用的发布方式
+#   2. 手动触发（Actions 页面点 Run workflow）—— 方便不发版也验证一次镜像
+#   3. 推 main 分支 —— 产出 :edge 镜像，便于持续验证
 on:
   push:
     tags:
       - 'v*.*.*'
+    branches:
+      - main
   workflow_dispatch:
     inputs:
-      name:
-        description: 'reason'
+      reason:
+        description: '构建原因（仅用于日志标识）'
         required: false
+
+env:
+  # 镜像仓库归属。与上游 justsong/one-api 彻底解耦：
+  # 这个仓库的镜像只推到自己的 GHCR，不会去污染上游命名空间，
+  # 也避免因缺少 DOCKERHUB_* secret 而整条流水线失败。
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
 jobs:
-  push_to_registries:
-    name: Push Docker image to multiple registries
+  build-and-push:
+    name: Build and push image
     runs-on: ubuntu-latest
     permissions:
-      packages: write
       contents: read
+      packages: write
+
     steps:
       - name: Check out the repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+        with:
+          # 需要完整历史才能拿到 tag 信息（下面用 git describe 兜底）
+          fetch-depth: 0
 
-      - name: Check repository URL
+      - name: Determine version
+        id: ver
         run: |
-          REPO_URL=$(git config --get remote.origin.url)
-          if [[ $REPO_URL == *"pro" ]]; then
-            exit 1
+          # 上游用 `git describe --tags > VERSION`，但本仓库可能一个 tag 都没有，
+          # 此时 git describe 会以非零码退出。在 set -e 下那会让整步失败，
+          # 之前就是在这里卡住的。这里做三级兜底：
+          #   1. 有 tag         -> git describe（含 -N-gSHA 后缀，能看出距离）
+          #   2. 没 tag 但有 SHA -> 用短 SHA
+          #   3. 都没有          -> v0.0.0-dev
+          if V=$(git describe --tags --always --dirty 2>/dev/null) && [ -n "$V" ]; then
+            echo "version=$V" >> "$GITHUB_OUTPUT"
+          elif V=$(git rev-parse --short HEAD 2>/dev/null) && [ -n "$V" ]; then
+            echo "version=$V" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=v0.0.0-dev" >> "$GITHUB_OUTPUT"
           fi
+          echo "resolved version: $(cat "$GITHUB_OUTPUT" | tail -1)"
 
-      - name: Save version info
+      - name: Write VERSION file
         run: |
-          git describe --tags > VERSION 
+          # Dockerfile 里有两处 `cat VERSION`（前端与后端的 -X 注入），
+          # 仓库中的 VERSION 是占位空文件，这里统一写入本次构建的版本。
+          echo "${{ steps.ver.outputs.version }}" > VERSION
+          cat VERSION
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -37,32 +69,35 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v2
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Log in to the Container registry
-        uses: docker/login-action@v2
-        with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels) for Docker
+      - name: Extract metadata (tags, labels)
         id: meta
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@v5
         with:
-          images: |
-            ${{ contains(github.ref, 'alpha') && 'justsong/one-api-alpha' || 'justsong/one-api' }}
-            ${{ contains(github.ref, 'alpha') && format('ghcr.io/{0}-alpha', github.repository) || format('ghcr.io/{0}', github.repository) }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=ref,event=branch
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
 
-      - name: Build and push Docker images
-        uses: docker/build-push-action@v3
+      - name: Build and push
+        uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: ${{ contains(github.ref, 'alpha') && 'linux/amd64' || 'linux/amd64' }}
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # 用 GHA 缓存，避免每次都从头 npm install + go mod download
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILD_THEME=default

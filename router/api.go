@@ -45,7 +45,11 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.PUT("/self", controller.UpdateSelf)
 				selfRoute.DELETE("/self", controller.DeleteSelf)
 				selfRoute.GET("/token", controller.GenerateAccessToken)
-				selfRoute.GET("/aff", controller.GetAffCode)
+				// 注意：GET /api/user/aff 已由 router/commercial.go 注册为
+				// controller.GetAffInfo（含邀请码、链接、邀请人数、待结算/累计）。
+				// 这里不要再注册 GetAffCode —— gin 对同一 method+path 会保留
+				// 先注册的那个，后注册的静默失效，而旧实现只返回一个裸邀请码字符串，
+				// 会让前端拿到 "k5om" 而不是对象。
 				selfRoute.POST("/topup", controller.TopUp)
 				selfRoute.GET("/available_models", controller.GetUserAvailableModels)
 			}
@@ -117,5 +121,11 @@ func SetApiRouter(router *gin.Engine) {
 		{
 			groupRoute.GET("/", controller.GetGroups)
 		}
+
+		// ---- 商业化路由（支付 / 订阅 / 定价 / 分成 / 看板）----
+		// 拆成独立文件是为了让「哪些接口会动钱」一目了然；
+		// 未配置支付网关的部署，这些接口会自行返回"未开启"，不影响其他功能。
+		SetPaymentRouter(apiRouter)
+		SetCommercialRouter(apiRouter)
 	}
 }

@@ -1,0 +1,43 @@
+# Docker 构建上下文排除项。
+#
+# 为什么需要：没有这个文件时，`COPY . .` 会把本地所有东西都送进构建上下文——
+# 包括 node_modules（几百 MB）、.git（历史可能很大）、本地数据库与日志。
+# 不仅慢，还可能把 .env / *.db 这类敏感或冗余文件带进镜像层。
+#
+# 注意：不要排除 web/build，Stage 1 的产物是要用的；
+# 但本地那份 web/build 应排除，因为镜像内会重新生成，
+# 混入本地产物会让"构建是否真的跑了前端"变得不可判断。
+
+# 依赖与构建缓存
+**/node_modules
+**/.nuxt
+**/.output
+**/dist
+
+# 本地前端产物（镜像内由 Stage 1 重新生成）
+web/build
+
+# 版本控制与 CI
+.git
+.gitignore
+.github
+
+# 本地环境与数据
+.env
+*.db
+*.db-journal
+*.exe
+logs
+data
+upload
+temp
+
+# 编辑器
+.idea
+.vscode
+.DS_Store
+
+# 文档与杂项（不影响二进制，减小上下文）
+cmd.md
+*.md
+!README*.md

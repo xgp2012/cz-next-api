@@ -1,47 +1,88 @@
 # One API 的前端界面
 
-> 每个文件夹代表一个主题，欢迎提交你的主题
+前端已重构为 **Nuxt 4** 实现，产物为纯静态文件，由 Go 二进制通过 `go:embed` 内嵌分发。
 
-> [!WARNING]
-> 不是每一个主题都及时同步了所有功能，由于精力有限，优先更新默认主题，其他主题欢迎 & 期待 PR
+## 目录结构
 
-## 提交新的主题
+```
+web/
+├── nuxt/            # Nuxt 4 前端源码（当前唯一在维护的主题）
+├── build/           # 构建产物，被 main.go 的 go:embed 内嵌（不纳入版本控制）
+├── build-nuxt.sh    # 构建脚本：nuxt/ -> build/<theme>/
+├── THEMES           # 参与构建的主题列表
+└── README.md
+```
 
-> 欢迎在页面底部保留你和 One API 的版权信息以及指向链接
+## 构建
 
-1. 在 `web` 文件夹下新建一个文件夹，文件夹名为主题名。
-2. 把你的主题文件放到这个文件夹下。
-3. 修改你的 `package.json` 文件，把 `build` 命令改为：`"build": "react-scripts build && mv -f build ../build/default"`，其中 `default` 为你的主题名。
-4. 修改 `common/config/config.go` 中的 `ValidThemes`，把你的主题名称注册进去。
-5. 修改 `web/THEMES` 文件，这里也需要同步修改。
+```sh
+# 在仓库根目录执行
+sh web/build-nuxt.sh              # 构建 THEMES 中列出的全部主题
+sh web/build-nuxt.sh default      # 只构建 default
+SKIP_INSTALL=1 sh web/build-nuxt.sh   # 依赖已装好时跳过 npm install
+```
 
-## 主题列表
+脚本会执行 `nuxt generate`（Nitro `preset: static`），并把 `.output/public` 的内容
+复制到 `web/build/<theme>/`。之后 `go build` 即可把前端打进单二进制：
 
-### 主题：default
+```sh
+go build -o one-api .
+```
 
-默认主题，由 [JustSong](https://github.com/songquanpeng) 开发。
+## 开发
 
-预览：
-|![image](https://github.com/songquanpeng/one-api/assets/39998050/ccfbc668-3a7f-4bc1-87da-7eacfd7bf371)|![image](https://github.com/songquanpeng/one-api/assets/39998050/a63ed547-44b9-45db-b43a-ecea07d60840)|
-|:---:|:---:|
+需要同时跑后端与前端开发服务器：
 
-### 主题：berry
+```sh
+# 终端 1：后端
+go run .            # 监听 :3000
 
-由 [MartialBE](https://github.com/MartialBE) 开发。
+# 终端 2：前端（Vite 会把 /api /v1 /dashboard 代理到 :3000）
+cd web/nuxt
+npm install
+npm run dev         # 监听 :3001，浏览器访问这个端口
+```
 
-预览：
-|||
-|:---:|:---:|
-|![image](https://github.com/songquanpeng/one-api/assets/42402987/36aff5c6-c5ff-4a90-8e3d-33d5cff34cbf)|![image](https://github.com/songquanpeng/one-api/assets/42402987/9ac63b36-5140-4064-8fad-fc9d25821509)|
-|![image](https://github.com/songquanpeng/one-api/assets/42402987/fb2b1c64-ef24-4027-9b80-0cd9d945a47f)|![image](https://github.com/songquanpeng/one-api/assets/42402987/b6b649ec-2888-4324-8b2d-d5e11554eed6)|
-|![image](https://github.com/songquanpeng/one-api/assets/42402987/6d3b22e0-436b-4e26-8911-bcc993c6a2bd)|![image](https://github.com/songquanpeng/one-api/assets/42402987/eef1e224-7245-44d7-804e-9d1c8fa3f29c)|
+## 设计要点
 
-### 主题：air
-由 [Calon](https://github.com/Calcium-Ion) 开发。
-|![image](https://github.com/songquanpeng/songquanpeng.github.io/assets/39998050/1ddb274b-a715-4e81-858b-857d520b6ff4)|![image](https://github.com/songquanpeng/songquanpeng.github.io/assets/39998050/163b0b8e-1f73-49cb-b632-3dcb986b56d5)|
-|:---:|:---:|
+### 渲染策略：SSR + 静态预渲染混合
 
+- 公开页（`/`、`/about`、`/login`、`/register`、`/reset`）在构建期被预渲染成完整
+  HTML，首屏无白屏、内容可被爬虫读取。
+- 管理页（`/channel`、`/token`、`/log` 等）不预渲染：它们依赖登录态，构建机上
+  既没有后端也没有 cookie，预渲染没有意义。访问这些路径时 Go 侧下发同一个
+  `index.html` 外壳，浏览器挂载后由 vue-router 接管。
+- 因此**所有面向用户的数据请求都必须放在 `onMounted` 中**，不能进 SSR。
+  `app/utils/http.ts` 在服务端会直接返回占位结果，避免构建期发起无意义的请求。
 
-#### 开发说明
+### 后端契约
 
-请查看 [web/berry/README.md](https://github.com/songquanpeng/one-api/tree/main/web/berry/README.md)
+- 控制面 `/api/*` 绝大多数业务错误都返回 **HTTP 200 + `{success:false, message}`**，
+  只有鉴权失败、限流、panic 才会出现 401/403/429/500。
+  判断成功与否一律以 `success` 字段为准，不要依赖 HTTP 状态码。
+- 登录态是 cookie session（`gin-contrib/sessions`），前端不发送 `Authorization` 头。
+- 列表接口是**游标式分页**：`?p=0` 返回前 10 条，`?p=1` 返回第 11–20 条；
+  返回条数少于 10 即表示已到末页（`ITEMS_PER_PAGE = 10`）。
+
+### 与原实现的差异
+
+- UI 库从 Semantic UI React 换成 **@nuxt/ui**（Tailwind CSS 4）。
+- 图表不再依赖 recharts：控制台的 7 点折线用内联 SVG 手绘，零额外依赖。
+- i18n 不再依赖 `@nuxtjs/i18n`：历史语言包用的是 i18next 的 `{{var}}` 插值语法，
+  而 vue-i18n 的编译器把 `{{...}}` 当作嵌套占位符直接报错。现在由
+  `app/utils/i18n.ts` 直接加载 JSON 并做运行期字符串插值，同时兼容
+  `{{var}}` 与 `{var}` 两种写法。
+- 构建期不访问外网：已关闭 `@nuxt/fonts`，图标集合（heroicons / lucide /
+  simple-icons）通过 `@iconify-json/*` 本地安装并在构建时内联，
+  因此离线与内网 CI 都能正常构建（详见下方 `nuxt.config.ts` 中的注释）。
+## 新增主题
+
+1. 在 `web` 下新建主题目录（或复用 `nuxt/`，通过 `nuxt.config.ts` 区分品牌样式）。
+2. 确认 `web/build-nuxt.sh` 能产出 `web/build/<主题名>/index.html`。
+3. 把主题名加入 `web/THEMES`。
+4. 把主题名加入 `common/config/config.go` 的 `ValidThemes`，
+   并同步 `web/nuxt/app/components/SettingOther.vue` 的 `themeOptions`——
+   三处必须一致，否则管理员会在设置页切到没有构建产物的主题。
+
+> 说明：`router/web.go` 在主题产物缺失时会回落到 `default` 并打印警告；
+> 若连 `default` 都不存在，进程会直接退出而不是提供一个空白页面。

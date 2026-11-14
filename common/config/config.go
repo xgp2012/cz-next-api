@@ -117,10 +117,12 @@ var RelayTimeout = env.Int("RELAY_TIMEOUT", 0) // unit is second
 var GeminiSafetySetting = env.String("GEMINI_SAFETY_SETTING", "BLOCK_NONE")
 
 var Theme = env.String("THEME", "default")
+// ValidThemes 必须与 web/THEMES 及实际构建产物保持一致。
+// 前端已重构为 Nuxt 单主题实现，web/build 下只有 default；
+// 继续登记 berry / air 会让管理员在设置页切到不存在的构建，得到空白页。
+// 新增主题时同步修改 web/THEMES。
 var ValidThemes = map[string]bool{
 	"default": true,
-	"berry":   true,
-	"air":     true,
 }
 
 // All duration's unit is seconds
@@ -164,3 +166,21 @@ var UserContentRequestTimeout = env.Int("USER_CONTENT_REQUEST_TIMEOUT", 30)
 
 var EnforceIncludeUsage = env.Bool("ENFORCE_INCLUDE_USAGE", false)
 var TestPrompt = env.String("TEST_PROMPT", "Output only your specific model name with no additional text.")
+
+// ---------------------------------------------------------------------------
+// 商业化配置说明
+//
+// 支付 / 订阅 / 分成相关的变量**不在此文件**，而在 payment.go：
+//
+//  1. 把会影响钱的开关集中在一处，审计时只看一个文件。
+//  2. 这些配置一律走环境变量，不进 options 表——getOptions 只脱敏名字里
+//     含 "Secret"/"Token" 的键，EpayKey 这种命名并不在脱敏名单里，
+//     放进数据库迟早会被 /api/option 明文回显。
+// ---------------------------------------------------------------------------
+
+// BillingMode 计费模式：billing（商业）/ selfuse（自用）。
+//
+// 差异只体现在「未定价模型」的处理上：selfuse 下走内置倍率表兜底，
+// billing 下同样兜底但会打警告，便于运营发现漏配价格。
+var BillingMode = env.String("BILLING_MODE", "billing")
+

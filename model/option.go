@@ -75,7 +75,22 @@ func InitOptionMap() {
 	config.OptionMap["QuotaPerUnit"] = strconv.FormatFloat(config.QuotaPerUnit, 'f', -1, 64)
 	config.OptionMap["RetryTimes"] = strconv.Itoa(config.RetryTimes)
 	config.OptionMap["Theme"] = config.Theme
+	// ---- 商业化选项 ----
+	config.OptionMap["PayAddress"] = config.PayAddress
+	config.OptionMap["EpayId"] = config.EpayId
+	config.OptionMap["EpayKey"] = config.EpayKey
+	config.OptionMap["PayMethods"] = config.PayMethods
+	config.OptionMap["AmountOptions"] = config.AmountOptions
+	config.OptionMap["MinTopUp"] = strconv.FormatFloat(config.MinTopUp, 'f', -1, 64)
+	config.OptionMap["MaxWalletQuota"] = strconv.FormatInt(config.MaxWalletQuota, 10)
+	config.OptionMap["CustomCallbackAddress"] = config.CustomCallbackAddress
+	config.OptionMap["WebhookSecret"] = config.WebhookSecret
+	config.OptionMap["AffCommissionEnabled"] = strconv.FormatBool(config.AffCommissionEnabled)
+	config.OptionMap["AffCommissionRate"] = strconv.FormatFloat(config.AffCommissionRate, 'f', -1, 64)
+	config.OptionMap["AffCommissionMinQuota"] = strconv.FormatInt(config.AffCommissionMinQuota, 10)
+	config.OptionMap["BillingMode"] = config.BillingMode
 	config.OptionMapRWMutex.Unlock()
+	refreshCommissionConfig()
 	loadOptionsFromDatabase()
 }
 
@@ -239,6 +254,50 @@ func updateOptionMap(key string, value string) (err error) {
 		config.QuotaPerUnit, _ = strconv.ParseFloat(value, 64)
 	case "Theme":
 		config.Theme = value
+	// ---- 商业化选项 ----
+	case "PayAddress":
+		config.PayAddress = value
+	case "EpayId":
+		config.EpayId = value
+	case "EpayKey":
+		config.EpayKey = value
+	case "PayMethods":
+		config.PayMethods = value
+	case "AmountOptions":
+		config.AmountOptions = value
+	case "MinTopUp":
+		config.MinTopUp, _ = strconv.ParseFloat(value, 64)
+	case "MaxWalletQuota":
+		config.MaxWalletQuota, _ = strconv.ParseInt(value, 10, 64)
+	case "CustomCallbackAddress":
+		config.CustomCallbackAddress = value
+	case "WebhookSecret":
+		config.WebhookSecret = value
+	case "AffCommissionEnabled":
+		config.AffCommissionEnabled = value == "true"
+		refreshCommissionConfig()
+	case "AffCommissionRate":
+		config.AffCommissionRate, _ = strconv.ParseFloat(value, 64)
+		refreshCommissionConfig()
+	case "AffCommissionMinQuota":
+		config.AffCommissionMinQuota, _ = strconv.ParseInt(value, 10, 64)
+		refreshCommissionConfig()
+	case "BillingMode":
+		config.BillingMode = value
 	}
 	return err
+}
+
+// refreshCommissionConfig 把 config 中的分成开关同步给 model 包。
+//
+// 之所以要这样绕一圈：model 不能 import config（config 已被 model 依赖），
+// 所以由 model 暴露一个 provider 函数，这里在配置变更时刷新。
+func refreshCommissionConfig() {
+	SetCommissionConfigProvider(func() CommissionConfig {
+		return CommissionConfig{
+			Enabled:     config.AffCommissionEnabled,
+			DefaultRate: config.AffCommissionRate,
+			MinQuota:    config.AffCommissionMinQuota,
+		}
+	})
 }
