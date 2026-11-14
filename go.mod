@@ -6,6 +6,15 @@ module github.com/songquanpeng/one-api
 //   package slices is not in GOROOT
 // 本地装了更高的版本所以看不出来 —— 这类"本地能过、CI 挂"的偏差
 // 正是 go-version-file 该暴露的问题，因此以代码实际需求为准。
+//
+// ⚠️ 不要用 `CGO_ENABLED=0 go mod tidy` 整理本文件。
+// 两个 SQLite 驱动按构建标签互斥（model/sqlite_cgo.go 是 `cgo`，
+// model/sqlite_purego.go 是 `!cgo`），而 tidy 只看当前构建条件下的
+// 实际引用：CGO_ENABLED=0 时它会判定 gorm.io/driver/sqlite 无人使用
+// 并直接删除，Docker 构建（CGO_ENABLED=1）随后就会失败；反之亦然。
+// 需要 tidy 时请显式带上另一侧，或改完手工把两个驱动都加回来：
+//   CGO_ENABLED=1 go mod tidy   # 保留 mattn
+//   CGO_ENABLED=0 go mod tidy   # 保留 glebarez
 go 1.21
 
 require (
