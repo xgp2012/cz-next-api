@@ -5,10 +5,14 @@ package model
 // 默认构建（CGO 可用）：使用 mattn/go-sqlite3，性能更好，
 // 支持完整的 SQLite 特性。需要本机装有 gcc。
 //
-// 若机器上没有 gcc（`CGO_ENABLED=0`），请改用 `-tags sqlite_purego`
-// 构建，见 sqlite_purego.go。不加任何 tag 直接构建会在运行时报
-// "go-sqlite3 requires cgo to work. This is a stub" —— 那个错误来自
-// mattn 驱动在 CGO 关闭时的桩实现，编译期看不出来，只有真的启动才炸。
+// 切换到纯 Go 驱动不需要加任何 tag，直接控制 CGO 即可：
+//   CGO_ENABLED=1 → 本文件（mattn）
+//   CGO_ENABLED=0 → sqlite_purego.go（glebarez，纯 Go）
+//
+// 注意：`CGO_ENABLED=0` 时若仍用 mattn 驱动，编译期完全不报错，
+// 只有真的启动、Open 数据库时才炸：
+//   "go-sqlite3 requires cgo to work. This is a stub"
+// 这个桩实现藏在 mattn 里，正是本文件要绕开的那个坑。
 
 import (
 	"gorm.io/driver/sqlite"
